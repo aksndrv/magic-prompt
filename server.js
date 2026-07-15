@@ -118,14 +118,22 @@ app.get("/auth/patreon/callback", async (req, res) => {
         }
         
         const patreonId = identity.data.id;
-
         const memberships = (identity.included || []).filter((i) => i.type === "member");
-        const qualifying = memberships.find((m) => {
+        let qualifying = memberships.find((m) => {
             const campaignId = m.relationships && m.relationships.campaign && m.relationships.campaign.data && m.relationships.campaign.data.id;
             return campaignId === PATREON_CAMPAIGN_ID
                 && m.attributes.patron_status === "active_patron"
                 && m.attributes.currently_entitled_amount_cents >= Number(MIN_PLEDGE_CENTS);
         });
+
+        // TEST MODE: lets you (the creator) log in and test the pipeline
+        // without needing a real membership record, since creators don't
+        // have a pledge to their own campaign. REMOVE / set to "false"
+        // before real patrons start using this.
+        if (!qualifying && process.env.TEST_MODE === "true") {
+            console.log("TEST_MODE active: bypassing membership check for", patreonId);
+            qualifying = true;
+        }
 
         if (!qualifying) {
             return res.status(403).send("You're not currently an active patron at the qualifying tier.");
