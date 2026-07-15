@@ -101,7 +101,7 @@ app.get("/auth/patreon/callback", async (req, res) => {
 
         // Check identity + membership status against YOUR campaign.
         const identityUrl = new URL("https://www.patreon.com/api/oauth2/v2/identity");
-        identityUrl.searchParams.set("include", "memberships.currently_entitled_tier,memberships.campaign");
+        identityUrl.searchParams.set("include", "memberships.currently_entitled_tiers,memberships.campaign");
         identityUrl.searchParams.set("fields[member]", "patron_status,currently_entitled_amount_cents");
 
         const identityRes = await fetch(identityUrl, {
