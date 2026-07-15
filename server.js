@@ -108,8 +108,17 @@ app.get("/auth/patreon/callback", async (req, res) => {
             headers: { Authorization: `Bearer ${tokenData.access_token}` },
         });
         const identity = await identityRes.json();
-
+        
+        if (!identity.data) {
+            console.error("Patreon identity call failed:", JSON.stringify(identity));
+            return res.status(502).send(
+                "Couldn't fetch your Patreon identity. Details logged on the server. Raw response: " +
+                JSON.stringify(identity)
+            );
+        }
+        
         const patreonId = identity.data.id;
+
         const memberships = (identity.included || []).filter((i) => i.type === "member");
         const qualifying = memberships.find((m) => {
             const campaignId = m.relationships && m.relationships.campaign && m.relationships.campaign.data && m.relationships.campaign.data.id;
