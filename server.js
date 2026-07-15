@@ -19,6 +19,16 @@ const crypto = require("crypto");
 const Database = require("better-sqlite3");
 
 const app = express();
+
+// Allow the CEP panel (running from a different origin) to call this server.
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return res.sendStatus(200);
+    next();
+});
+
 app.use(express.json());
 // Webhook signature verification needs the raw body, so capture it too.
 app.use(express.raw({ type: "application/json", limit: "2mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
