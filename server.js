@@ -241,13 +241,17 @@ app.post("/generate", express.json(), async (req, res) => {
             },
             body: JSON.stringify({
                 model: "claude-sonnet-5",
-                max_tokens: 1000,
+                max_tokens: 3000,
                 system: systemPrompt,
                 messages: [{ role: "user", content: instruction }],
             }),
         });
         const data = await claudeRes.json();
         if (data.error) return res.status(502).json({ error: "Claude API error: " + data.error.message });
+        if (data.stop_reason === "max_tokens") {
+            console.warn("Response was truncated (hit max_tokens) for instruction:", instruction);
+            return res.status(502).json({ error: "The script was too long and got cut off. Try breaking your request into smaller steps." });
+        }
 
         // Track real spend using Anthropic's reported token usage.
         // Sonnet 5: $3/million input, $15/million output (adjust if pricing changes).
