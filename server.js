@@ -230,7 +230,11 @@ app.post("/generate", express.json(), async (req, res) => {
             "no explanation, no markdown fences. It runs inside a function via eval(), so end " +
             "with a return statement returning a short string describing what it did. Assume " +
             "app.project already exists; use app.project.activeItem if it's a CompItem, otherwise " +
-            "create a new comp. Reference patterns:\n\n" + (snippets || []).join("\n\n");
+            "create a new comp. IMPORTANT: many AE API calls require true integers for pixel " +
+            "dimensions (e.g. addSolid width/height, addComp width/height) -- calculated values " +
+            "like comp.width / count often produce decimals, which AE rejects. Always wrap any " +
+            "calculated numeric value passed to a width/height/pixel parameter in Math.round(). " +
+            "Reference patterns:\n\n" + (snippets || []).join("\n\n");
 
         const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
