@@ -53,9 +53,12 @@ CREATE TABLE IF NOT EXISTS users (
     active_patron INTEGER DEFAULT 0,
     period_start TEXT,
     cents_used INTEGER DEFAULT 0,
+    last_script TEXT,
     updated_at TEXT
 );
 `);
+// Safe to run even if the column already exists from an earlier version of this table.
+try { db.exec(`ALTER TABLE users ADD COLUMN last_script TEXT`); } catch (e) { /* already exists, fine */ }
 
 function currentMonthKey() {
     const d = new Date();
@@ -118,7 +121,7 @@ app.get("/auth/patreon/callback", async (req, res) => {
             headers: { Authorization: `Bearer ${tokenData.access_token}` },
         });
         const identity = await identityRes.json();
-        
+
         if (!identity.data) {
             console.error("Patreon identity call failed:", JSON.stringify(identity));
             return res.status(502).send(
@@ -126,7 +129,7 @@ app.get("/auth/patreon/callback", async (req, res) => {
                 JSON.stringify(identity)
             );
         }
-        
+
         const patreonId = identity.data.id;
         const memberships = (identity.included || []).filter((i) => i.type === "member");
         let qualifying = memberships.find((m) => {
@@ -234,6 +237,17 @@ app.post("/generate", express.json(), async (req, res) => {
             "dimensions (e.g. addSolid width/height, addComp width/height) -- calculated values " +
             "like comp.width / count often produce decimals, which AE rejects. Always wrap any " +
             "calculated numeric value passed to a width/height/pixel parameter in Math.round(). " +
+            "When you create layers, always give them clear, descriptive, unique names (e.g. " +
+            "'Bar 1', 'Bar 2', 'Year Label 2023') so they can be found again later by name. " +
+            (user.last_script
+                ? "Here is the script from the user's PREVIOUS request, showing what currently " +
+                  "exists in the comp (layer names, structure). If this new instruction is a " +
+                  "modification/follow-up (e.g. 'change X', 'make it Y instead'), do NOT " +
+                  "recreate everything from scratch -- find the existing layers by name (e.g. " +
+                  "comp.layer('Bar 1')) and modify only what's needed. Only build new objects " +
+                  "from scratch if the new instruction clearly asks for something new:\n\n" +
+                  "```\n" + user.last_script + "\n```\n\n"
+                : "") +
             "Reference patterns:\n\n" + (snippets || []).join("\n\n");
 
         const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -252,6 +266,7 @@ app.post("/generate", express.json(), async (req, res) => {
         });
         const data = await claudeRes.json();
         if (data.error) return res.status(502).json({ error: "Claude API error: " + data.error.message });
+
         if (data.stop_reason === "max_tokens") {
             console.warn("Response was truncated (hit max_tokens) for instruction:", instruction);
             return res.status(502).json({ error: "The script was too long and got cut off. Try breaking your request into smaller steps." });
@@ -263,9 +278,6 @@ app.post("/generate", express.json(), async (req, res) => {
         const outputCents = (data.usage.output_tokens / 1_000_000) * 1500;
         const costCents = Math.ceil(inputCents + outputCents);
 
-        db.prepare("UPDATE users SET cents_used = cents_used + ? WHERE patreon_id = ?")
-            .run(costCents, user.patreon_id);
-
         const script = data.content
             .filter((b) => b.type === "text")
             .map((b) => b.text)
@@ -273,6 +285,9 @@ app.post("/generate", express.json(), async (req, res) => {
             .replace(/^```(javascript|js|jsx)?/gm, "")
             .replace(/```$/gm, "")
             .trim();
+
+        db.prepare("UPDATE users SET cents_used = cents_used + ?, last_script = ? WHERE patreon_id = ?")
+            .run(costCents, script, user.patreon_id);
 
         res.json({ script, centsUsed: user.cents_used + costCents, budgetCents: Number(MONTHLY_BUDGET_CENTS) });
     } catch (err) {
