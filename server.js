@@ -216,7 +216,7 @@ app.post("/webhooks/patreon", (req, res) => {
 
 app.post("/generate", express.json(), async (req, res) => {
     try {
-        const { sessionToken, instruction, snippets } = req.body;
+        const { sessionToken, instruction, snippets, compSnapshot } = req.body;
         if (!sessionToken || !instruction) return res.status(400).json({ error: "Missing sessionToken or instruction." });
 
         const user = getOrResetUser(
@@ -239,15 +239,16 @@ app.post("/generate", express.json(), async (req, res) => {
             "calculated numeric value passed to a width/height/pixel parameter in Math.round(). " +
             "When you create layers, always give them clear, descriptive, unique names (e.g. " +
             "'Bar 1', 'Bar 2', 'Year Label 2023') so they can be found again later by name. " +
-            (user.last_script
-                ? "Here is the script from the user's PREVIOUS request, showing what currently " +
-                  "exists in the comp (layer names, structure). If this new instruction is a " +
-                  "modification/follow-up (e.g. 'change X', 'make it Y instead'), do NOT " +
-                  "recreate everything from scratch -- find the existing layers by name (e.g. " +
+            (compSnapshot && compSnapshot.hasActiveComp
+                ? "Here is the ACTUAL CURRENT STATE of the active comp, queried live from After " +
+                  "Effects right now -- this is ground truth, not a guess. If this instruction is " +
+                  "a modification/follow-up (e.g. 'change X', 'make it Y instead'), do NOT " +
+                  "recreate anything that already exists -- find the existing layers by name (e.g. " +
                   "comp.layer('Bar 1')) and modify only what's needed. Only build new objects " +
-                  "from scratch if the new instruction clearly asks for something new:\n\n" +
-                  "```\n" + user.last_script + "\n```\n\n"
-                : "") +
+                  "from scratch if the instruction clearly asks for something new:\n\n" +
+                  JSON.stringify(compSnapshot) + "\n\n"
+                : "There is no active comp with known contents right now -- if the instruction " +
+                  "implies modifying something, you may need to create it fresh instead.\n\n") +
             "Reference patterns:\n\n" + (snippets || []).join("\n\n");
 
         const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
